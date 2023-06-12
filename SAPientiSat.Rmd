@@ -1,0 +1,1131 @@
+---
+title: "Mobilnost turista i poslovanje hrvatskog turističkog sektora - SAPientiSat"
+date: 15.1.2023
+output:
+  pdf_document: default
+  html_notebook: default
+---
+```{r setup, include=FALSE}
+
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(fig.width=12, fig.height=8) 
+library(dplyr)
+library(data.table)
+require(fastDummies)
+require(nortest)
+```
+ 
+## 1.pitanje: 
+            Analizirajte podatke o dnevnom prometu preko graničnih prijelaza. Postoje li razlike medu vrstama
+            graničnih prijelaza? Postoje li razlike medu različitim danima u tjednu ili mjesecima?
+
+
+Učitavamo podatke o domaćim i stranim ulascima i izlascima iz RH. Prijelazi se dijele na cestovni, željeznički, riječni, pomorski i zračni. 
+
+##Tablice podataka
+```{r}
+domaci_ul_put <- read.csv("domaci_promet/domaci_ulaz_putnici.csv")
+domaci_iz_put <-read.csv("domaci_promet/domaci_izlaz_putnici.csv")
+strani_ul_put <- read.csv("strani_promet/strani_ulaz_putnici.csv")
+strani_iz_put <- read.csv("strani_promet/strani_izlaz_putnici.csv")
+
+```
+
+```{r, include=FALSE}
+summary(domaci_ul_put)
+summary(domaci_iz_put)
+summary(strani_ul_put)
+summary(strani_iz_put)
+```
+
+
+```{r, include=FALSE}
+domaci_ul_put$Cestovni[domaci_ul_put$Cestovni>150000]<-55804
+domaci_ul_put$Riječni[domaci_ul_put$Riječni>200]<-1
+domaci_ul_put$Pomorski[domaci_ul_put$Pomorski>3000]<-36
+
+domaci_iz_put$Cestovni[domaci_iz_put$Cestovni>150000]<-56032
+domaci_iz_put$Riječni[domaci_iz_put$Riječni>50]<-1
+domaci_iz_put$Pomorski[domaci_iz_put$Pomorski>1000]<-36
+domaci_iz_put$Zračni[domaci_iz_put$Zračni>10000]<-1235
+
+strani_ul_put$Zračni[strani_ul_put$Zračni>60000]<-3461
+
+strani_iz_put$Cestovni[strani_iz_put$Cestovni>600000]<-92766
+
+```
+
+## Grafovi
+S Obzirom na to da su auto i autobus često najpraktičnija prijevozna sredstva, očekujemo veliku razliku između cestovnih prijelaza i ostalih. Napravit ćemo graf prelazaka granice po zasebnim prijelazima. Također očekujemo vidjeti znatan pad u broju prijelaza početkom COVID-19 krize odnosno u periodu 2020-2021 godine.
+
+```{r, echo=FALSE}
+ggplot(data=domaci_ul_put, main='Domaći ulasci po vrsti prijelaza') +  
+    geom_line(aes(x=as.Date(X), y = Cestovni), color = "black") +
+    geom_line(aes(x=as.Date(X), y = Riječni), color = "red") +
+    geom_line(aes(x=as.Date(X), y = Pomorski), color = "green") +
+    geom_line(aes(x=as.Date(X), y = Zračni), color = "blue") +
+    geom_line(aes(x=as.Date(X), y = Željeznički), color = "purple") + ylab("Frekvencija") + xlab("Vrijeme") + ggtitle("Domaći ulaz putnici")
+```
+
+
+```{r, include=FALSE}
+ggplot(data=domaci_iz_put, main='Domaći izlasci po vrsti prijelaza') +  
+    geom_line(aes(x=as.Date(X), y = Cestovni), color = "black") +
+    geom_line(aes(x=as.Date(X), y = Riječni), color = "red") +
+    geom_line(aes(x=as.Date(X), y = Pomorski), color = "green") +
+    geom_line(aes(x=as.Date(X), y = Zračni), color = "blue") +
+    geom_line(aes(x=as.Date(X), y = Željeznički), color = "purple") +ylab("Frekvencija") + xlab("Vrijeme") + ggtitle("Domaći izlaz putnici")
+
+ggplot(data=strani_iz_put, main='Strani izlasci po vrsti prijelaza') +  
+    geom_line(aes(x=as.Date(X), y = Cestovni), color = "black") +
+    geom_line(aes(x=as.Date(X), y = Riječni), color = "red") +
+    geom_line(aes(x=as.Date(X), y = Pomorski), color = "green") +
+    geom_line(aes(x=as.Date(X), y = Zračni), color = "blue") +
+    geom_line(aes(x=as.Date(X), y = Željeznički), color = "purple") +ylab("Frekvencija") + xlab("Vrijeme") + ggtitle("Strani izlaz putnici")
+```
+
+
+```{r, echo=FALSE}
+ggplot(data=strani_ul_put, main='Strani ulasci po vrsti prijelaza') +  
+    geom_line(aes(x=as.Date(X), y = Cestovni), color = "black") +
+    geom_line(aes(x=as.Date(X), y = Riječni), color = "red") +
+    geom_line(aes(x=as.Date(X), y = Pomorski), color = "green") +
+    geom_line(aes(x=as.Date(X), y = Zračni), color = "blue") +
+    geom_line(aes(x=as.Date(X), y = Željeznički), color = "purple") +ylab("Frekvencija") + xlab("Vrijeme") + ggtitle("Strani ulaz putnici")
+```
+
+Iz grafa vidimo da su naša očekivanja bila točna. Broj kretanja kroz cestovne prijelaze je znatno veći od broja kretanja kroz ostale vrste prijelaza. Ipak, treba primjetiti nešto značajniji broj korištenja necestovnih prijelaza kod stranaca u odnosu na domaće stanovnike. Iz grafa je također jasno vidljiv predviđeni pad broja prijelaza u vrijeme korone. Zbog malog broja prelazaka kroz riječne, pomorske i želježničke prijelaze u sljedećem ćemo ih prikazu grupirati u jednu skupinu nazvanu "Ostali".
+
+```{r, echo=FALSE}
+boxplot(domaci_ul_put$Cestovni,domaci_ul_put$Zračni, domaci_ul_put$Željeznički+domaci_ul_put$Riječni+domaci_ul_put$Pomorski, ylim=c(0,150000),
+        names = c('Cestovni', 'Zračni','Ostali'),
+        main='Boxplot prikaz domaćih ulaza')
+        
+boxplot(domaci_iz_put$Cestovni, domaci_iz_put$Zračni,domaci_iz_put$Željeznički+domaci_iz_put$Riječni+domaci_iz_put$Pomorski, ylim=c(0,150000),
+        names = c('Cestovni','Zračni','Ostali'),
+        main='Boxplot prikaz domaćih izlaza')
+        
+boxplot(strani_ul_put$Cestovni,strani_ul_put$Zračni,strani_ul_put$Željeznički+strani_ul_put$Riječni+strani_ul_put$Pomorski, ylim=c(0,700000),
+        names = c('Cestovni','Zračni','Ostali'),
+        main='Boxplot prikaz stranih ulaza')
+        
+boxplot(domaci_iz_put$Cestovni,domaci_iz_put$Zračni,domaci_iz_put$Željeznički+domaci_iz_put$Riječni+domaci_iz_put$Pomorski, ylim=c(0,100000),
+        names = c('Cestovni','Zračni','Ostali'),
+        main='Boxplot prikaz stranih izlaza')
+```
+```{r, echo=FALSE}
+ukupno_ulazaka <- rbindlist(list(domaci_ul_put, strani_ul_put))[, lapply(.SD, sum, na.rm = TRUE), by = X]
+ukupno_izlazaka <- rbindlist(list(domaci_iz_put, strani_iz_put))[, lapply(.SD, sum, na.rm = TRUE), by = X]
+
+razlika_ulaz_izlaz <- rbindlist(list(ukupno_ulazaka, ukupno_izlazaka))[, lapply(.SD, diff, na.rm = TRUE), by = X]
+
+ggplot(razlika_ulaz_izlaz,aes(X,UKUPNO))+geom_bar(stat="identity") + ylim(c(-80000,80000)) + ggtitle("Razlika ulazak/izlazak")
+ggplot(razlika_ulaz_izlaz[1:365],aes(X,UKUPNO), ylabel="dani")+geom_bar(stat="identity") + ylim(c(-80000,80000)) + ggtitle("Razlika ulazak/izlazak 2013")
+ggplot(razlika_ulaz_izlaz[2191:3087],aes(X,UKUPNO), ylabel="dani")+geom_bar(stat="identity") + ylim(c(-80000,80000)) + ggtitle("Razlika ulazak/izlazak period 1.1.2019-15.6.2021")
+```
+
+
+##    Domaci ulaz
+```{r}
+domaci_ulaz_prometna_sredstva <- read.csv("domaci_promet/domaci_ulaz_prometna_sredstva.csv")
+
+
+names(domaci_ulaz_prometna_sredstva)
+attach(domaci_ulaz_prometna_sredstva)
+
+datumi_ulaz <- as.Date(domaci_ulaz_prometna_sredstva$X, format = "%Y-%m-%d")
+
+ukupno_ulaz <- domaci_ulaz_prometna_sredstva$UKUPNO
+ukupno_ulaz[ukupno_ulaz > 100000] <- 19000
+
+
+data_ulaz <- data.frame(datumi = datumi_ulaz, vrijednosti = ukupno_ulaz)
+data_ulaz <- data_ulaz[order(data_ulaz$datumi), ]
+
+data_ulaz_new <- data_ulaz
+data_ulaz_new$year <- strftime(data_ulaz_new$datumi, "%Y")
+data_ulaz_new$month <- strftime(data_ulaz_new$datumi, "%m")
+data_ulaz_new$dan <- c("01")
+
+
+data_aggr_ulaz <- aggregate(vrijednosti ~ month + year + dan, data_ulaz_new, FUN = sum)
+
+my_cols_ulaz <- c("month", "year", "dan")
+data_aggr_ulaz$month_year_ulaz <- do.call(paste, c(data_aggr_ulaz[my_cols_ulaz], sep="-"))
+data_aggr_ulaz <- data_aggr_ulaz[ , ! colnames(data_aggr_ulaz) %in% my_cols_ulaz]
+
+novi_datumi_ulaz <- as.Date(data_aggr_ulaz$month_year_ulaz, format = "%m-%Y-%d")
+data_aggr_ulaz$month_year_ulaz <- novi_datumi_ulaz
+
+
+ggplot(data_aggr_ulaz, aes(x = month_year_ulaz, y = vrijednosti)) + 
+  geom_line() + 
+  scale_x_date(date_labels = "%Y-%m") +
+  scale_y_continuous(limits = c(0, 1100000))
+
+```
+##    Domaci izlaz
+```{r}
+domaci_izlaz_prometna_sredstva <- read.csv("domaci_promet/domaci_izlaz_prometna_sredstva.csv")
+
+
+names(domaci_izlaz_prometna_sredstva)
+attach(domaci_izlaz_prometna_sredstva)
+
+datumi_izlaz <- as.Date(domaci_izlaz_prometna_sredstva$X, format = "%d/%m/%Y")
+
+ukupno_izlaz <- domaci_izlaz_prometna_sredstva$UKUPNO
+ukupno_izlaz[ukupno_izlaz > 100000] <- 19000
+
+data_izlaz <- data.frame(datumi = datumi_izlaz, vrijednosti = ukupno_izlaz)
+data_izlaz <- data_izlaz[order(data_izlaz$datumi), ]
+
+data_izlaz_new <- data_izlaz
+data_izlaz_new$year <- strftime(data_izlaz_new$datumi, "%Y")
+data_izlaz_new$month <- strftime(data_izlaz_new$datumi, "%m")
+data_izlaz_new$dan <- c("01")
+
+
+data_aggr_izlaz <- aggregate(vrijednosti ~ month + year + dan, data_izlaz_new, FUN = sum)
+
+my_cols_izlaz <- c("month", "year", "dan")
+data_aggr_izlaz$month_year_izlaz <- do.call(paste, c(data_aggr_izlaz[my_cols_izlaz], sep="-"))
+data_aggr_izlaz <- data_aggr_izlaz[ , ! colnames(data_aggr_izlaz) %in% my_cols_izlaz]
+
+novi_datumi_izlaz <- as.Date(data_aggr_izlaz$month_year_izlaz, format = "%m-%Y-%d")
+data_aggr_izlaz$month_year_izlaz <- novi_datumi_izlaz
+
+
+ggplot(data_aggr_izlaz, aes(x = month_year_izlaz, y = vrijednosti)) + 
+  geom_line() + 
+  scale_x_date(date_labels = "%Y-%m") +
+  scale_y_continuous(limits = c(0, 1100000))
+```
+
+##    Strani ulaz
+```{r}
+
+strani_ulaz_prometna_sredstva <- read.csv("strani_promet/strani_ulaz_prometna_sredstva.csv")
+
+
+names(strani_ulaz_prometna_sredstva)
+attach(strani_ulaz_prometna_sredstva)
+
+datumi_strani_ulaz <- as.Date(strani_ulaz_prometna_sredstva$X, format = "%Y-%m-%d")
+
+ukupno_strani_ulaz <- strani_ulaz_prometna_sredstva$UKUPNO
+ukupno_strani_ulaz[ukupno_strani_ulaz > 170000] <- 38000
+
+data_strani_ulaz <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = ukupno_strani_ulaz)
+data_strani_ulaz <- data_strani_ulaz[order(data_strani_ulaz$datumi), ]
+
+data_strani_ulaz_new <- data_strani_ulaz
+data_strani_ulaz_new$year <- strftime(data_strani_ulaz_new$datumi, "%Y")
+data_strani_ulaz_new$month <- strftime(data_strani_ulaz_new$datumi, "%m")
+data_strani_ulaz_new$dan <- c("01")
+
+
+data_aggr_strani_ulaz <- aggregate(vrijednosti ~ month + year + dan, data_strani_ulaz_new, FUN = sum)
+
+my_cols_strani_ulaz <- c("month", "year", "dan")
+data_aggr_strani_ulaz$month_year_strani_ulaz <- do.call(paste, c(data_aggr_strani_ulaz[my_cols_strani_ulaz], sep="-"))
+data_aggr_strani_ulaz <- data_aggr_strani_ulaz[ , ! colnames(data_aggr_strani_ulaz) %in% my_cols_strani_ulaz]
+
+novi_datumi_strani_ulaz <- as.Date(data_aggr_strani_ulaz$month_year_strani_ulaz, format = "%m-%Y-%d")
+data_aggr_strani_ulaz$month_year_strani_ulaz <- novi_datumi_strani_ulaz
+
+
+ggplot(data_aggr_strani_ulaz, aes(x = month_year_strani_ulaz, y = vrijednosti)) + 
+  geom_line() + 
+  scale_x_date(date_labels = "%Y-%m") +
+  scale_y_continuous(limits = c(0, 3300000))
+```
+
+##    Strani izlaz
+```{r}
+library(ggplot2)
+strani_izlaz_prometna_sredstva <- read.csv("strani_promet/strani_izlaz_prometna_sredstva.csv")
+
+
+names(strani_izlaz_prometna_sredstva)
+attach(strani_izlaz_prometna_sredstva)
+
+datumi_strani_izlaz <- as.Date(strani_izlaz_prometna_sredstva$X, format = "%Y-%m-%d")
+
+ukupno_strani_izlaz <- strani_izlaz_prometna_sredstva$UKUPNO
+ukupno_strani_izlaz[ukupno_strani_izlaz > 170000] <- 37000
+
+data_strani_izlaz <- data.frame(datumi = datumi_strani_izlaz, vrijednosti = ukupno_strani_izlaz)
+data_strani_izlaz <- data_strani_izlaz[order(data_strani_izlaz$datumi), ]
+
+data_strani_izlaz_new <- data_strani_izlaz
+data_strani_izlaz_new$year <- strftime(data_strani_izlaz_new$datumi, "%Y")
+data_strani_izlaz_new$month <- strftime(data_strani_izlaz_new$datumi, "%m")
+data_strani_izlaz_new$dan <- c("01")
+
+
+data_aggr_strani_izlaz <- aggregate(vrijednosti ~ month + year + dan, data_strani_izlaz_new, FUN = sum)
+
+my_cols_strani_izlaz <- c("month", "year", "dan")
+data_aggr_strani_izlaz$month_year_strani_izlaz <- do.call(paste, c(data_aggr_strani_izlaz[my_cols_strani_izlaz], sep="-"))
+data_aggr_strani_izlaz <- data_aggr_strani_izlaz[ , ! colnames(data_aggr_strani_izlaz) %in% my_cols_strani_izlaz]
+
+novi_datumi_strani_izlaz <- as.Date(data_aggr_strani_izlaz$month_year_strani_izlaz, format = "%m-%Y-%d")
+data_aggr_strani_izlaz$month_year_strani_izlaz <- novi_datumi_strani_izlaz
+
+
+ggplot(data_aggr_strani_izlaz, aes(x = month_year_strani_izlaz, y = vrijednosti)) + 
+  geom_line() + 
+  scale_x_date(date_labels = "%Y-%m") +
+  scale_y_continuous(limits = c(0, 3300000))
+```
+
+
+##    Strani razlika
+```{r}
+razlika2<- data_aggr_strani_ulaz["vrijednosti"] - data_aggr_strani_izlaz["vrijednosti"]
+strani_razlika <- data.frame(datumi=data_aggr_strani_izlaz$month_year_strani_izlaz, razlika=razlika2)
+
+hist(strani_razlika$vrijednosti, main = "Ulasni stranih vozila - izlasci stranih vozila", xlab = "razlika")
+```
+
+##    Strani auti ulaz
+```{r}
+auti<-strani_ulaz_prometna_sredstva$osobni.automobili
+
+data_auti <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = auti)
+data_auti <- data_auti[order(data_auti$datumi), ]
+
+data_new_auti <- data_auti
+data_new_auti$year <- strftime(data_new_auti$datumi, "%Y")
+data_new_auti$month <- strftime(data_new_auti$datumi, "%m")
+data_new_auti$dan <- c("01")
+
+data_aggr_auti_godina <- aggregate(vrijednosti ~ year, data_new_auti, FUN = sum)
+auti_merge <- merge(x=data_new_auti, y=data_aggr_auti_godina, by.x=("year"), by.y=("year"))
+data_aggr_auti <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, auti_merge, FUN = sum)
+
+my_cols_auti <- c("month", "year", "dan")
+data_aggr_auti$month_year <- do.call(paste, c(data_aggr_auti[my_cols_auti], sep="-"))
+data_aggr_auti <- data_aggr_auti[ , ! colnames(data_aggr_auti) %in% my_cols_auti]
+
+novi_datumi_auti <- as.Date(data_aggr_auti$month_year, format = "%m-%Y-%d")
+data_aggr_auti$month_year <- novi_datumi_auti
+
+auti_x1<-data_aggr_auti$vrijednosti.x
+auti_x2<-data_aggr_auti$vrijednosti.y
+auti_df1<-data.frame(auti_x1, auti_x2)
+auti_x3<-auti_df1/auti_df1[,2]
+data_aggr_auti$vrijednosti.x <- auti_x3$auti_x1
+
+```
+Gledamo sezonalost prometnih sredstava. Ovdje je primjer za automobile, ali tako je napravljeno za sva sredstva. Izračunali smo koliko je automobila ušlo u jednoj godini i u jednom mjesecu i dijeili mjesečni broj ulazaka s pridruženim godišnjim brojem ulazaka i tako dobili mjesečni udio ulazaka za svako prometno sredstvo.  
+
+
+##    Strani ulaz vlakovi
+```{r include=FALSE}
+vlakovi<-strani_ulaz_prometna_sredstva$vlakovi
+
+data_vlakovi <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = vlakovi)
+data_vlakovi <- data_vlakovi[order(data_vlakovi$datumi), ]
+
+data_new_vlakovi <- data_vlakovi
+data_new_vlakovi$year <- strftime(data_new_vlakovi$datumi, "%Y")
+data_new_vlakovi$month <- strftime(data_new_vlakovi$datumi, "%m")
+data_new_vlakovi$dan <- c("01")
+
+data_aggr_vlakovi_godina <- aggregate(vrijednosti ~ year, data_new_vlakovi, FUN = sum)
+vlakovi_merge <- merge(x=data_new_vlakovi, y=data_aggr_vlakovi_godina, by.x=("year"), by.y=("year"))
+data_aggr_vlakovi <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, vlakovi_merge, FUN = sum)
+
+my_cols_vlakovi <- c("month", "year", "dan")
+data_aggr_vlakovi$month_year <- do.call(paste, c(data_aggr_vlakovi[my_cols_vlakovi], sep="-"))
+data_aggr_vlakovi <- data_aggr_vlakovi[ , ! colnames(data_aggr_vlakovi) %in% my_cols_vlakovi]
+
+novi_datumi_vlakovi <- as.Date(data_aggr_vlakovi$month_year, format = "%m-%Y-%d")
+data_aggr_vlakovi$month_year <- novi_datumi_vlakovi
+
+vlakovi_x1<-data_aggr_vlakovi$vrijednosti.x
+vlakovi_x2<-data_aggr_vlakovi$vrijednosti.y
+vlakovi_df1<-data.frame(vlakovi_x1, vlakovi_x2)
+vlakovi_x3<-vlakovi_df1/vlakovi_df1[,2]
+data_aggr_vlakovi$vrijednosti.x <- vlakovi_x3$vlakovi_x1
+
+```
+
+##    Strani ulaz teretna vozila
+```{r include=FALSE}
+teretna_vozila<-strani_ulaz_prometna_sredstva$teretna.vozila
+
+data_teretna_vozila <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = teretna_vozila)
+data_teretna_vozila <- data_teretna_vozila[order(data_teretna_vozila$datumi), ]
+
+data_new_teretna_vozila <- data_teretna_vozila
+data_new_teretna_vozila$year <- strftime(data_new_teretna_vozila$datumi, "%Y")
+data_new_teretna_vozila$month <- strftime(data_new_teretna_vozila$datumi, "%m")
+data_new_teretna_vozila$dan <- c("01")
+
+data_aggr_teretna_vozila_godina <- aggregate(vrijednosti ~ year, data_new_teretna_vozila, FUN = sum)
+teretna_vozila_merge <- merge(x=data_new_teretna_vozila, y=data_aggr_teretna_vozila_godina, by.x=("year"), by.y=("year"))
+data_aggr_teretna_vozila <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, teretna_vozila_merge, FUN = sum)
+
+my_cols_teretna_vozila <- c("month", "year", "dan")
+data_aggr_teretna_vozila$month_year <- do.call(paste, c(data_aggr_teretna_vozila[my_cols_teretna_vozila], sep="-"))
+data_aggr_teretna_vozila <- data_aggr_teretna_vozila[ , ! colnames(data_aggr_teretna_vozila) %in% my_cols_teretna_vozila]
+
+novi_datumi_teretna_vozila <- as.Date(data_aggr_teretna_vozila$month_year, format = "%m-%Y-%d")
+data_aggr_teretna_vozila$month_year <- novi_datumi_teretna_vozila
+
+teretna_vozila_x1<-data_aggr_teretna_vozila$vrijednosti.x
+teretna_vozila_x2<-data_aggr_teretna_vozila$vrijednosti.y
+teretna_vozila_df1<-data.frame(teretna_vozila_x1, teretna_vozila_x2)
+teretna_vozila_x3<-teretna_vozila_df1/teretna_vozila_df1[,2]
+data_aggr_teretna_vozila$vrijednosti.x <- teretna_vozila_x3$teretna_vozila_x1
+
+```
+
+##    Strani ulaz uutobusi
+```{r include=FALSE}
+autobusi<-strani_ulaz_prometna_sredstva$autobusi
+
+data_autobusi <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = autobusi)
+data_autobusi <- data_autobusi[order(data_autobusi$datumi), ]
+
+data_new_autobusi <- data_autobusi
+data_new_autobusi$year <- strftime(data_new_autobusi$datumi, "%Y")
+data_new_autobusi$month <- strftime(data_new_autobusi$datumi, "%m")
+data_new_autobusi$dan <- c("01")
+
+data_aggr_autobusi_godina <- aggregate(vrijednosti ~ year, data_new_autobusi, FUN = sum)
+autobusi_merge <- merge(x=data_new_autobusi, y=data_aggr_autobusi_godina, by.x=("year"), by.y=("year"))
+data_aggr_autobusi <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, autobusi_merge, FUN = sum)
+
+my_cols_autobusi <- c("month", "year", "dan")
+data_aggr_autobusi$month_year <- do.call(paste, c(data_aggr_autobusi[my_cols_autobusi], sep="-"))
+data_aggr_autobusi <- data_aggr_autobusi[ , ! colnames(data_aggr_autobusi) %in% my_cols_autobusi]
+
+novi_datumi_autobusi <- as.Date(data_aggr_autobusi$month_year, format = "%m-%Y-%d")
+data_aggr_autobusi$month_year <- novi_datumi_autobusi
+
+autobusi_x1<-data_aggr_autobusi$vrijednosti.x
+autobusi_x2<-data_aggr_autobusi$vrijednosti.y
+autobusi_df1<-data.frame(autobusi_x1, autobusi_x2)
+autobusi_x3<-autobusi_df1/autobusi_df1[,2]
+data_aggr_autobusi$vrijednosti.x <- autobusi_x3$autobusi_x1
+
+```
+
+##    Strani ulaz plovila
+```{r include=FALSE}
+plovila<-strani_ulaz_prometna_sredstva$plovila
+
+data_plovila <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = plovila)
+data_plovila <- data_plovila[order(data_plovila$datumi), ]
+
+data_new_plovila <- data_plovila
+data_new_plovila$year <- strftime(data_new_plovila$datumi, "%Y")
+data_new_plovila$month <- strftime(data_new_plovila$datumi, "%m")
+data_new_plovila$dan <- c("01")
+
+data_aggr_plovila_godina <- aggregate(vrijednosti ~ year, data_new_plovila, FUN = sum)
+plovila_merge <- merge(x=data_new_plovila, y=data_aggr_plovila_godina, by.x=("year"), by.y=("year"))
+data_aggr_plovila <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, plovila_merge, FUN = sum)
+
+my_cols_plovila <- c("month", "year", "dan")
+data_aggr_plovila$month_year <- do.call(paste, c(data_aggr_plovila[my_cols_plovila], sep="-"))
+data_aggr_plovila <- data_aggr_plovila[ , ! colnames(data_aggr_plovila) %in% my_cols_plovila]
+
+novi_datumi_plovila <- as.Date(data_aggr_plovila$month_year, format = "%m-%Y-%d")
+data_aggr_plovila$month_year <- novi_datumi_plovila
+
+plovila_x1<-data_aggr_plovila$vrijednosti.x
+plovila_x2<-data_aggr_plovila$vrijednosti.y
+plovila_df1<-data.frame(plovila_x1, plovila_x2)
+plovila_x3<-plovila_df1/plovila_df1[,2]
+data_aggr_plovila$vrijednosti.x <- plovila_x3$plovila_x1
+
+```
+
+##    Strani ulaz zrakoplovi
+```{r include=FALSE}
+zrakoplovi<-strani_ulaz_prometna_sredstva$zrakoplovi
+
+data_zrakoplovi <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = zrakoplovi)
+data_zrakoplovi <- data_zrakoplovi[order(data_zrakoplovi$datumi), ]
+
+data_new_zrakoplovi <- data_zrakoplovi
+data_new_zrakoplovi$year <- strftime(data_new_zrakoplovi$datumi, "%Y")
+data_new_zrakoplovi$month <- strftime(data_new_zrakoplovi$datumi, "%m")
+data_new_zrakoplovi$dan <- c("01")
+
+data_aggr_zrakoplovi_godina <- aggregate(vrijednosti ~ year, data_new_zrakoplovi, FUN = sum)
+zrakoplovi_merge <- merge(x=data_new_zrakoplovi, y=data_aggr_zrakoplovi_godina, by.x=("year"), by.y=("year"))
+data_aggr_zrakoplovi <- aggregate(vrijednosti.x ~ month + year + dan + vrijednosti.y, zrakoplovi_merge, FUN = sum)
+
+my_cols_zrakoplovi <- c("month", "year", "dan")
+data_aggr_zrakoplovi$month_year <- do.call(paste, c(data_aggr_zrakoplovi[my_cols_zrakoplovi], sep="-"))
+data_aggr_zrakoplovi <- data_aggr_zrakoplovi[ , ! colnames(data_aggr_zrakoplovi) %in% my_cols_zrakoplovi]
+
+novi_datumi_zrakoplovi <- as.Date(data_aggr_zrakoplovi$month_year, format = "%m-%Y-%d")
+data_aggr_zrakoplovi$month_year <- novi_datumi_zrakoplovi
+
+zrakoplovi_x1<-data_aggr_zrakoplovi$vrijednosti.x
+zrakoplovi_x2<-data_aggr_zrakoplovi$vrijednosti.y
+zrakoplovi_df1<-data.frame(zrakoplovi_x1, zrakoplovi_x2)
+zrakoplovi_x3<-zrakoplovi_df1/zrakoplovi_df1[,2]
+data_aggr_zrakoplovi$vrijednosti.x <- zrakoplovi_x3$zrakoplovi_x1
+
+```
+
+
+##    Graf za sezonalnost stranog ulaza
+```{r echo=FALSE}
+library(lubridate)
+
+df_merged_sve <- data.frame(
+  datumi = data_aggr_auti$month_year,
+  auti = data_aggr_auti$vrijednosti.x,
+  vlakovi = data_aggr_vlakovi$vrijednosti.x,
+  teretna_vozila = data_aggr_teretna_vozila$vrijednosti.x,
+  autobusi = data_aggr_autobusi$vrijednosti.x,
+  plovila = data_aggr_plovila$vrijednosti.x,
+  zrakoplovi = data_aggr_zrakoplovi$vrijednosti.x
+)
+
+
+p <- ggplot(data = df_merged_sve, aes(x = datumi)) +
+  geom_line(aes(y = auti, group = 1, color = "Auti")) +
+  geom_line(aes(y = vlakovi, group = 2, color = "Vlakovi")) +
+  geom_line(aes(y = teretna_vozila, group = 3, color = "Teretna vozila")) +
+  geom_line(aes(y = autobusi, group = 4, color = "Autobusi")) +
+  geom_line(aes(y = plovila, group = 5, color = "Plovila")) +
+  geom_line(aes(y = zrakoplovi, group = 6, color = "Zrakoplovi")) +
+  labs(x = "Vrijeme", y = "Postotak") 
+print(p)
+
+```
+Graf pokazuje određenu sezonalnost za sva prometna sredstva. Za vlakove i teretna vozila sezonalnost je mnogo slabija, što je i logično s obzirom na prirodu tih sredstava.
+
+
+```{r}
+
+data_aggr_auti_2018_2019 <- data_aggr_auti %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+data_aggr_vlakovi_2018_2019 <- data_aggr_vlakovi %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+data_aggr_teretna_vozila_2018_2019 <- data_aggr_teretna_vozila %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+data_aggr_autobusi_2018_2019 <- data_aggr_autobusi %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+data_aggr_plovila_2018_2019 <- data_aggr_plovila %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+data_aggr_zrakoplovi_2018_2019 <- data_aggr_zrakoplovi %>% filter(year(month_year) == 2018 | year(month_year) == 2019 | year(month_year) == 2020)
+
+```
+Filtriranje podataka za sva prometna sredstva u preiodu 2018. - 2021.
+
+##    Graf za 2018-2021
+```{r}
+df_merged <- data.frame(
+  datumi = data_aggr_auti_2018_2019$month_year,
+  auti = data_aggr_auti_2018_2019$vrijednosti.x,
+  vlakovi = data_aggr_vlakovi_2018_2019$vrijednosti.x,
+  teretna_vozila = data_aggr_teretna_vozila_2018_2019$vrijednosti.x,
+  autobusi = data_aggr_autobusi_2018_2019$vrijednosti.x,
+  plovila = data_aggr_plovila_2018_2019$vrijednosti.x,
+  zrakoplovi = data_aggr_zrakoplovi_2018_2019$vrijednosti.x
+)
+
+ggplot(data = df_merged, aes(x = datumi)) +
+  geom_line(aes(y = auti, group = 1, color = "Auti")) +
+  geom_line(aes(y = vlakovi, group = 2, color = "Vlakovi")) +
+  geom_line(aes(y = teretna_vozila, group = 3, color = "Teretna vozila")) +
+  geom_line(aes(y = autobusi, group = 4, color = "Autobusi")) +
+  geom_line(aes(y = plovila, group = 5, color = "Plovila")) +
+  geom_line(aes(y = zrakoplovi, group = 6, color = "Zrakoplovi")) +
+  labs(x = "Vrijeme", y = "Postotak")
+```
+Graf također prikazuje udio pojedinog sredsstva za određeni mjesec u određenoj godini, ali samo u preiodu 2018. - 2021.
+Jasno se vidi pojačanost svih oblika prometa u ljetnim mjesecima sve do pandemijske 2020. godine kada se linije razdvajaju, ali već pri kraju 2021. se vidi lagano ponovno spajanje linija.
+
+##    Dolasci stranih vozila
+
+```{r}
+dani_dolazaka <- data.frame(datumi = datumi_strani_ulaz, vrijednosti = ukupno_strani_ulaz, godina = format(as.Date(datumi_strani_ulaz, format="%Y-%m-%d"),"%Y"))
+
+dani_dolazaka$dan <- seq.int(nrow(dani_dolazaka))
+dani_dolazaka$dan <- dani_dolazaka$dan%%7
+
+dan_u_godini <- dani_dolazaka %>% group_by( godina, dan) %>% 
+  summarise(sum_vrijednost=sum(vrijednosti),
+            .groups = 'drop') %>%
+  as.data.frame()
+
+df_dan_u_godini <- data.frame(matrix(ncol=7, nrow=10))
+rownames(df_dan_u_godini) <- c("2013","2014","2015","2016","2017","2018","2019","2020","2021","2022")
+
+for(i in rownames(dan_u_godini)){
+  if(is.na(df_dan_u_godini[dan_u_godini[i,"godina"], dan_u_godini[i,"dan"] + 1])){
+    df_dan_u_godini[dan_u_godini[i,"godina"], dan_u_godini[i,"dan"] + 1] <- dan_u_godini[i,"sum_vrijednost"]
+  } else{
+    df_dan_u_godini[dan_u_godini[i,"godina"], dan_u_godini[i,"dan"] + 1] <- df_dan_u_godini[dan_u_godini[i,"godina"], dan_u_godini[i,"dan"] + 1] + dan_u_godini[i,"sum_vrijednost"]
+  }
+}
+
+df_dan_u_godini
+
+hist(dani_dolazaka$vrijednosti)
+
+dani_dolazaka$vrijednosti <- log(dani_dolazaka$vrijednosti)
+
+hist(dani_dolazaka$vrijednosti)
+qqnorm(dani_dolazaka$vrijednosti)
+qqline(dani_dolazaka$vrijednosti)
+
+require(nortest)
+lillie.test(dani_dolazaka$vrijednosti)
+
+aov_result <- aov(dani_dolazaka$vrijednosti ~ dani_dolazaka$godina * dani_dolazaka$dan)
+summary(aov_result)
+
+
+```
+Nakon logaritamske pretvorbe podataka dobivamo distribuciju sličniju normalnoj, ali funkcija lillie.test() pokazuje da i dalje nije normalna distribucija. 
+
+
+
+```{r}
+dani_dolazaka_filtered <- subset(dani_dolazaka, !(godina %in% c("2020","2021","2022")))
+
+aov_result_filtered <- aov(dani_dolazaka_filtered$vrijednosti ~ dani_dolazaka_filtered$godina * dani_dolazaka_filtered$dan)
+summary(aov_result_filtered)
+```
+Ako iz podataka o dolascima po danima izuzmemo pandemijske godine(2020.+), zbog velike p-vrijednosti zaključujemo da dan igra ulogu u broju dolazaka stranih prometnih sredstava, ali isto tako i godina. Kombinacija dana i godine je statistički beznačajna.
+
+
+##    2.Pitanje:
+  Analizirajte fundamentalne podatke turistiˇckih tvrtki – postoje li sezonalnosti i u njima?
+
+Pregled turističkog sektora
+
+Analizirana su kvartalna financijska izvješća (Q1, Q2, Q3 i Q4) u razdoblju od 2013. do 2022.
+
+Učitat ćemo podatke za 4 turistička poduzeća; Maistru, Arenu, Valamar te Imperial.
+
+```{r hoteli}
+maistra = select(read.csv("fundamenti/MAIS_fundamenti.csv"), -c("Published"))
+arena = select(read.csv("fundamenti/ARNT_fundamenti.csv"),  -c("Published"))
+valamar = select(read.csv("fundamenti/RIVP_fundamenti.csv"),  -c("Published"))
+imperial = select(read.csv("fundamenti/HIMR_fundamenti.csv"),  -c("Published"))
+```
+```{r pregled hotela, echo=FALSE, results='hide'}
+dim(maistra)
+dim(arena)
+dim(valamar)
+dim(imperial)
+
+maistra
+arena
+valamar
+imperial
+```
+
+Financijsko izvješća za kompaniju Valamar nije dostupnoga treći kvartal 2013. godine.
+
+Također, za sve kompanije nedostaju financijska izvješća za četvrti kvartal 2022. jer u vrijem pisanja ovog rada izvješća još uvijek nisu bila objavljena.
+
+Važno je istaknuti da u četvrtom kvartalu 2020. kompanija Imperial ima negativan prihod što može biti korektivna stavka zbog konsolidacije fonacijskih izvještaja unutar grupe.
+
+S obzirom na to kako je najznačajniji dolazak turista svake godine u trećem kvartalu, a broj noćenja izravno povezan s prihodima, tada očekujemo da u tom kvartalu se isto tako najviše prometa generira. Stoga, napravit ćemo ukupan pregled prometa za sva 4 poduzeća.
+
+## Prihodi turističkog sektora zadnjih 10 godina
+
+```{r total revenue}
+totalRevenue <- rbind(maistra, valamar, arena, imperial)
+totalRevenue <- aggregate(totalRevenue$Sales, by = list(totalRevenue$Quarter, totalRevenue$Year), FUN = sum)
+colnames(totalRevenue) <- c("Quarter", "Year", "Sales")
+totalRevenue$Quarter = factor(totalRevenue$Quarter, levels = c(1,2,3,4), labels = c("Q1", "Q2", "Q3", "Q4")) 
+```
+
+```{r total revenue prikaz, echo=FALSE}
+ggplot(totalRevenue, aes(x = Year, y = Sales, fill = Quarter)) +
+  geom_col() +
+  labs(x = "Year", y = "Sales", title = "Yearly Revenue by Quarter", fill = "Quarter") 
+```
+
+Iz grafa se može vidjeti da je najveći udio prihoda u svakoj pojedinačnoj godini ostvaren upravo u Q3. Kako bismo tu hipotezu s velikom pouzdanošću mogli potvrditi provest ćemo analizu varijance u kojoj ćemo vidjeti je li udio prihoda koji nastaje u Q3 statistički značajan.
+
+Grafički možemo vidjeti kako su prihodi 2020. značajno pali u odnosu na ostale godine. Razlog tome je epidemija virusa COVID-19 koja je značajno pogodila Hrvatsku, a samim time i ulazak turista te posljedično prihode poduzeća. U kasnijim analizama fundamenata ćemo ovo smatrati outlierom jer je to realizacija sistemskog rizika na tržištu i izvan kontrole je na poslovanje poduzeća. (Uz to imamo veliku odstupanja od pretpostavki modela kad uključujemo 2020. godinu)
+
+## ANOVA
+
+U svrhu analize za razdoblje 2013.-2022. zbrojeni su prihodi po kvartalima tako da se za svaku kompaniju utvrdio prihod svih prvih kvartala, svih drugih kvartala, svih trećih kvartala i svih četvrtih kvartala. Ti kvartalni prihodi su se zatim utvrdili za sve kompanije.
+
+Tako su dobivene 4 kategorijske varijable/grupe (kvartali) od kojih svaka ima po 10 podataka, čime test postaje robusniji na pretpostavke.
+
+Prije provedbe statističkog testa, moramo ispitati zadovoljavaju li podaci pretpostavke koje ANOVA zahtjeva.
+
+Nezavisnost pojedinih podataka u uzorcima: smatramo zadovoljenim upravo zato što prihodi koji su nastali u zasebnom kvartalu (npr. Q1) ne utječu na prihod iz bilo kojeg drugog kvartala.
+
+Provjera normalne razdiobe podataka po grupama:
+
+```{r provjera normalnosti podataka, echo=FALSE}
+
+require(nortest)
+hist(totalRevenue$Sales, main = "Histogram ukupnih prihoda", xlab = "Prihodi")
+lillie.test(totalRevenue$Sales)
+
+qqnorm(totalRevenue$Sales, main = "Q-Q plot ukupnih prihoda")
+qqline(totalRevenue$Sales)
+
+lillie.test(totalRevenue$Sales[totalRevenue$Quarter=='Q1'])
+lillie.test(totalRevenue$Sales[totalRevenue$Quarter=='Q2'])
+lillie.test(totalRevenue$Sales[totalRevenue$Quarter=='Q3'])
+lillie.test(totalRevenue$Sales[totalRevenue$Quarter=='Q4'])
+
+
+bartlett.test(totalRevenue$Sales~totalRevenue$Quarter)
+  
+```
+
+Iz gore navedenih rezultata možemo primijetiti da prihodi po grupama tj. po kvartalima prate normalnu razdiobu, dok za grupirane prihode to ne vrijedi, što pokazuje Lilieforsov test i Q-Q plot. Također, napravili smo provjeru homogenosti varijance koristeći Bartlettov test koji nam je pokazao da su varijance grupa međusobno različite.
+
+Histogram prihoda podsjeća na log-normalnu distribuciju. Kako bismo to i pokazali, primijenit ćemo log transformaciju da sve prihode svedemo na normalne i pritom samu varijancu grupa učinili homogenom. Time ćemo dobiti pouzdanije rezultate testa. Ako se distribucija prihoda ponaša po log-normalnoj distribuciji tj podaci se mogu opisati eksponencijalnom funkcijom, nakon transformacije bismo trebali dobiti normalne podatke.
+
+```{r provjera normalnosti transofmiranih podataka}
+
+transformed_data <- totalRevenue %>% mutate(Sales = log(Sales))
+
+qqnorm(transformed_data$Sales, main = "Q-Q plot log(ukupnih prihoda)")
+qqline(transformed_data$Sales)
+
+lillie.test(transformed_data$Sales)
+lillie.test(transformed_data$Sales[totalRevenue$Quarter == "Q1"])
+lillie.test(transformed_data$Sales[totalRevenue$Quarter == "Q2"])
+lillie.test(transformed_data$Sales[totalRevenue$Quarter == "Q3"])
+lillie.test(transformed_data$Sales[totalRevenue$Quarter == "Q4"])
+
+
+bartlett.test(transformed_data$Sales~totalRevenue$Quarter)
+
+  
+```
+
+Sada su sve pretpostavke ANOVA modela zadovoljene (nezavisnost, normalnost i homogenost) te možemo ići provesti statističko testiranje:
+
+```{r prikaz ANOVE, echo=FALSE, warning=FALSE}
+
+ggplot(transformed_data, aes(y =Sales, x = Quarter)) + geom_boxplot() +
+  scale_y_continuous(labels = scales::label_number_si(), 
+                     breaks = round(seq(min(transformed_data$Sales), max(transformed_data$Sales), by = 1),1)) +   
+  ggtitle("Prihodi po kvartalima zadnjih 10 godina")
+
+a = aov(transformed_data$Sales~transformed_data$Quarter)
+summary(a)
+  
+```
+
+Iz boxplota vidimo da medijan prihoda u Q3 nadilazi sve granica outliera za ostale kvartale. Koristeći ANOVU smo pokazali da je razlika između prosječnih prihoda po kvartalima statistički značajna te da najviše prihoda turistička poduzeća ostvaruju u trećem kvartalu, što se jasno vidi iz boxplota.
+
+## Analiza fundamenata turističkih poduzeća
+
+S obzirom na to da je neto marža jedan od ključnih fundamentalnih pokazatelja poslovanja poduzeća, taj pokazatelj je korišten u ovoj analizi. Neto marža izračunava se kao omjer neto dobiti i prihoda poduzeća.
+
+Ona pokazuje koja od 4 različitih poduzeća ima najprofitabilniji poslovni model odnosno kako pojedina firma posluje. Neto marža je ovdje najbolji pokazatelj jer sva 4 poduzeća posluju u istom segmentu (turizam) čime nam analiza postaje puno preciznija zbog toga što imamo usporedive tvrtke.
+
+Kako bismo vidjeli koje poduzeće je najprofitabilnije na godišnjoj razini opet ćemo provest analizu varijance.
+
+```{r Računanje neto marži za Maistru}
+maistra$Poduzece <- 1
+valamar$Poduzece <- 2 
+arena$Poduzece <- 3
+imperial$Poduzece <- 4
+
+totalMargin <- rbind(maistra, valamar, arena, imperial)
+
+totalMarginR <- aggregate(totalMargin$Sales, by = list(totalMargin$Year, totalMargin$Poduzece), FUN = sum)
+totalMarginE <- aggregate(totalMargin$Earnings, by = list(totalMargin$Year, totalMargin$Poduzece), FUN = sum)
+
+totalMargin <- cbind(totalMarginR, totalMarginE)
+totalMargin <- totalMargin[!duplicated(as.list(totalMargin))]
+colnames(totalMargin) <- c("Year", "Poduzece", "Sales", "Earnings")
+totalMargin$Margins <- totalMargin$Earnings/totalMargin$Sales
+
+totalMargin$Poduzece <- factor(totalMargin$Poduzece, levels = c(1,2,3,4), labels = c("Maistra", "Valamar", "Arena", "Imperial"))
+
+```
+
+```{r Prikaz neto marži pojedinih poduzeća, echo=FALSE}
+
+ggplot(totalMargin, aes(y = Margins, x = Poduzece)) + geom_boxplot() +
+  scale_y_continuous() +   
+  ggtitle("Neto marze pojedinih poduzeca")
+
+```
+
+Iz box plota vidimo da svako poduzeće ima nekoliko outliera. Iz podataka se može vidjeti da svako poduzeće ima negativnu maržu u 2020 zbog COVID-19.
+
+S obzirom na to da smo prije naveli kako je to jedna izuzetna godina, nju ćemo maknut iz podataka. Nakon toga ostajemo s jednim outlierom za Valamar i Arenu. Pregledom godišnjih financijskih izvještaja smo vidjeli da se u oba slučajeva radi o akvizicijama hotela i konsolidaciji izvještaja što je rezultiralo negativnim neto maržama. 2013. je Valamar preuzeo trgovačko društvo Dubrovnik - Babin Kuk d.d., a Arena je u lipnju 2016. značajno promijenilo pravno ustrojstvo i vlasničku strukturu kupovinom tri hrvatska društva -- Arenaturist Hoteli d.o.o., Arenaturist Zlatne stijene te d.o.o., Arenaturist Turistička naselja d.o.o.
+
+S obzirom na to kako su grupe imale niz jednokratnih ili izvanrednih troškova koje ne pripadaju uobičajenom poslovanju, njih također smatramo outlierom i izbacujemo iz podataka.
+
+```{r Prikaz neto marži pojedinih poduzeća bez outliera, echo=FALSE}
+
+totalMargin <- totalMargin[-c(8, 11, 18, 24, 28, 38 ),]
+ggplot(totalMargin, aes(y = Margins, x = Poduzece)) + geom_boxplot() +
+  scale_y_continuous() +   
+  ggtitle("Neto marze pojedinih poduzeca")
+
+```
+
+Provedimo sad postupak ANOVE:
+
+```{r ANOVA neto marži}
+
+lillie.test(totalMargin$Margins)
+lillie.test(totalMargin$Margins[totalMargin$Poduzece == "Maistra"])
+lillie.test(totalMargin$Margins[totalMargin$Poduzece == "Valamar"])
+lillie.test(totalMargin$Margins[totalMargin$Poduzece == "Arena"])
+lillie.test(totalMargin$Margins[totalMargin$Poduzece == "Imperial"])
+```
+
+Provjerimo zašto Maistra ne prati normalnu distribuciju:
+```{r ANOVA QQ plot Maistre}
+qqnorm(totalMargin$Margins[totalMargin$Poduzece == "Maistra"], main = "Q-Q plot Maistre")
+qqline(totalMargin$Margins[totalMargin$Poduzece == "Maistra"])
+```
+
+Možemo vidjeti da jedino Maistra ne prati normalnost podatka zbog svoja 2 outliera odnosno dobrih neto marži.
+
+```{r ANOVA rezultati}
+bartlett.test(totalMargin$Margins~totalMargin$Poduzece)
+a = aov(totalMargin$Margins~totalMargin$Poduzece)
+summary(a)
+```
+
+Ostali svi podaci zadovoljavaju pretpostavke ANOVE te korištenjem statističkog testa, u kojem je p vrijednost 0.17 možemo s velikom pouzdanošću tvrditi da na godišnjoj razini ne postoji statistički značajna razlika između poslovanja naših 4 turističkih poduzeća, odnosno svi su podjednako profitabilni.
+
+## Valuacije poduzeća
+
+Pored neto marži, P/E (price to earnings) jedan je od fundamentalnih omjera koji uspoređuje cijenu dionice poduzeća s njegovom zaradom po dionici (EPS) i koristi se za određivanje vrijednosti. Viši P/E omjer općenito ukazuje na to da je dionica skuplja i da investitori imaju veća očekivanja za budući rast zarade tvrtke.
+
+Na ZSE ćemo pogledati broj dionica i pretpostavit ćemo da se unazad 10 godina nisu mijenjale u korist naše analize. Izračunat ćemo EPS za svaku dionicu te iz toga dobiti P/E.
+
+```{r ANOVA  EPS-P/E}
+ totalMargin$NS[totalMargin$Poduzece == "Maistra"] <-  10944339
+ totalMargin$NS[totalMargin$Poduzece == "Valamar"] <- 	126027542
+ totalMargin$NS[totalMargin$Poduzece == "Arena"] <- 	  5128721
+ totalMargin$NS[totalMargin$Poduzece == "Imperial"] <- 	2279473
+ 
+ totalMargin$EPS[totalMargin$Poduzece == "Maistra"] <- totalMargin$Earnings[totalMargin$Poduzece == "Maistra"]/totalMargin$NS[totalMargin$Poduzece == "Maistra"]
+ 
+  totalMargin$EPS[totalMargin$Poduzece == "Valamar"] <- totalMargin$Earnings[totalMargin$Poduzece == "Valamar"]/totalMargin$NS[totalMargin$Poduzece == "Valamar"]
+  
+   totalMargin$EPS[totalMargin$Poduzece == "Arena"] <- totalMargin$Earnings[totalMargin$Poduzece == "Arena"]/totalMargin$NS[totalMargin$Poduzece == "Arena"]
+   
+    totalMargin$EPS[totalMargin$Poduzece == "Imperial"] <- totalMargin$Earnings[totalMargin$Poduzece == "Imperial"]/totalMargin$NS[totalMargin$Poduzece == "Imperial"]
+```
+
+Učitat ćemo CSV s cijenama dionica u kojima ćemo pronaći cijene dionica na zadnji dan trgovanja za svaku godinu kako bi se cijena poklapala s dobiti na kraju godine.
+
+```{r price setup P/E, echo=FALSE}
+
+maistraPrice <- read.csv("cijene/MAIS.csv")
+valamarPrice <- read.csv("cijene/RIVP.csv")
+arenaPrice <- read.csv("cijene/ARNT.csv")
+imperialPrice <- read.csv("cijene/HIMR.csv")
+
+maistraPrice$Date <- as.Date(maistraPrice$Date, format = "%Y-%m-%d")
+valamarPrice$Date <- as.Date(valamarPrice$Date, format = "%Y-%m-%d")
+arenaPrice$Date <- as.Date(arenaPrice$Date, format = "%Y-%m-%d")
+imperialPrice$Date <- as.Date(imperialPrice$Date, format = "%Y-%m-%d")
+
+maistraPrice$Year <- as.numeric(format(maistraPrice$Date, "%Y"))
+valamarPrice$Year <- as.numeric(format(valamarPrice$Date, "%Y"))
+arenaPrice$Year <- as.numeric(format(arenaPrice$Date, "%Y"))
+imperialPrice$Year <- as.numeric(format(imperialPrice$Date, "%Y"))
+
+maistraPrice <- group_by(maistraPrice, Year)
+valamarPrice <- group_by(valamarPrice, Year)
+arenaPrice <- group_by(arenaPrice, Year)
+imperialPrice <- group_by(imperialPrice, Year)
+
+last_day_of_year <- maistraPrice %>% filter(row_number() == 1)
+maistraPrice <- as.data.frame(last_day_of_year$Price)
+maistraPrice$Poduzece <- "Maistra"
+maistraPrice <- maistraPrice[rev(rownames(maistraPrice)),]
+
+last_day_of_year <- valamarPrice %>% filter(row_number() == 1)
+valamarPrice <- as.data.frame(last_day_of_year$Price)
+valamarPrice$Poduzece <- "Valamar"
+valamarPrice <- valamarPrice[rev(rownames(valamarPrice)),]
+
+last_day_of_year <- arenaPrice %>% filter(row_number() == 1)
+arenaPrice <- as.data.frame(last_day_of_year$Price)
+arenaPrice$Poduzece <- "Arena"
+arenaPrice<- arenaPrice[rev(rownames(arenaPrice)),]
+
+last_day_of_year <- imperialPrice %>% filter(row_number() == 1)
+imperialPrice <- as.data.frame(last_day_of_year$Price)
+imperialPrice$Poduzece <- "Imperial"
+imperialPrice <- imperialPrice[rev(rownames(imperialPrice)),]
+
+totalPrice <- rbind(maistraPrice, valamarPrice, arenaPrice, imperialPrice)
+totalPrice <- totalPrice[-c(8, 11, 18, 24, 28, 38 ),]
+
+total <- cbind(totalMargin[-c(31),], totalPrice)
+
+total$PE <- total$`last_day_of_year$Price`/total$EPS
+total <- total[!duplicated(as.list(total))]
+
+total <- total %>% filter(total$PE < 200 & total$PE > 0)
+```
+Analizirajući podatke smo utvrdili značajno velike outliere PE omjera (1200 za Arenu) koje smo izbacili kao i sve negativne vrijednosti jer one iz perspektive investiranja/valuacije te usporedbe nemaju smisla. Pogledajmo PE omjere turističkih poduzeća:
+```{r prikaz PE omjera, echo=FALSE}
+ggplot(total, aes(y = PE, x = Poduzece)) + geom_boxplot() +
+  scale_y_continuous() +   
+  ggtitle("PE omjeri turističkih poduzeća")
+```
+
+Boxplot sugerira da je Imperial precijenjen. 50% njegovih PE omjera za nalazi iznad gornjeg kvartila svih poduzeća i granice outliera.
+Razliku između prosječnih PE omjera provjeravamo ANOVA testom, no prije toga idemo pregledati podatke:
+
+```{r ANOVA PE omjera}
+hist(total$PE, main = "Histogram PE omjera turističkih poduzeća")
+```
+
+Probat ćemo nad ovim podacima također primjenit logaritamsku transfornmaciju i ukoliko se podaci ponašaju normalnu nastavit ćemo dalje s testom.
+```{r ANOVA  log PE omjera}
+transformed_dataPE <- total %>% mutate(PE = log(PE))
+```
+Pogledajmo Q-Q plot logaritamskih podataka:
+
+```{r ANOVA qq plot log PE omjera}
+qqnorm(transformed_dataPE$PE, main = "Q-Q plot logaritma PE omjera")
+qqline(transformed_dataPE$PE)
+```
+
+Provest ćemo test normalnosti:
+
+```{r ANOVA  test log PE omjera}
+lillie.test(transformed_dataPE$PE)
+```
+P vrijednost je veća od 0.05, što znači da na razini značajnosti od 5% možemo tvrditi da su podaci normalni. Sad treba provjerit isto po grupama:
+
+```{r ANOVA  i test PE omjera}
+lillie.test(transformed_dataPE$PE[transformed_dataPE$Poduzece == "Maistra"])
+lillie.test(transformed_dataPE$PE[transformed_dataPE$Poduzece == "Valamar"])
+lillie.test(transformed_dataPE$PE[transformed_dataPE$Poduzece == "Arena"])
+lillie.test(transformed_dataPE$PE[transformed_dataPE$Poduzece == "Imperial"])
+
+bartlett.test(transformed_dataPE$PE~transformed_dataPE$Poduzece)
+
+a = aov(transformed_dataPE$PE~transformed_dataPE$Poduzece)
+summary(a)
+```
+Ovaj slučaj je sličan kao prethodna dva. Omjeri se mogu ravnat po log-normalnoj razdiobu te se primjenom logaritamske transformacije PE omjeri poduzeća normaliziraju (osim Maistre), a varijance homogeniziraju (p vrijednost 0.156). ANOVOm smo pokazali da uz p vrijednost (0.0029) koja je manja od 1% postoji statistički značajna razlika između prosječnih PE omjera poduzeća. 
+
+PE omjeri Maistre, Valamara i Arene ne bi trebali biti toliko međusobno različiti (boxplot gore). Tu hipotezu bismo mogli dodatno provjerit tako da izbacimo Imperial iz skupa i provedemo ANOVU za ta tri poduzeća.
+
+## Zaključak
+
+Hrvatska turistička poduzeća ne ostvaruju prosječno istu količinu svojih prihoda u svim kvartalima. Većinu svojih prihoda ostvare u 3. kvartalu.
+
+Pored toga, na godišnjoj razini ne postoji značajna razlika između njihovog poslovanja odnosno profitabilnosti.
+
+Na kraju, promatrajući PE omjere, Imperial pokazuje znakove precijenjenosti u odnosu na ostala poduzeća u istom segmentu. Cijena dionice Maistre s druge strane može ukazivati na podcijenjenost; postoji mogućnost za potencijalni dugoročni rast s obzirom na to da tržište možda nije do kraja prepoznalo njenu pravu vrijednost analizirajući njenu najveću prosječnu neto maržu i najmanji prosječni PE omjer.
+
+
+## 3.Pitanje: 
+
+  Mogu li se fundamenti objasniti mobilnošću turista preko hrvatskih granica i u kojoj mjeri? 
+  Koja je vrsta prometa najznačajnija za hrvatska turistička poduzeća?
+  
+  Kako bismo zaključili mogu li se fundamenti objasniti mobilnošću turista preko granica odlučili smo koristiti podatke prije 2019. godine.
+  Naime 2019. nastupila je pandemija i promet preko granica znatno je stagnirao.
+  Također smo se vodili pretpostavkom da su turisti skloniji odsjedanju u hotelima stoga smo gledali podatke stranog prometa.
+  
+```{r input, include=FALSE}
+data.ulaz.putnici = read.csv("C:/Users/Admin/Desktop/SAP_SEMINAR/strani_promet/strani_ulaz_putnici.csv", )
+data.fund.arnt = read.csv("C:/Users/Admin/Desktop/SAP_SEMINAR/fundamenti/ARNT_fundamenti.csv")
+data.fund.himr = read.csv("C:/Users/Admin/Desktop/SAP_SEMINAR/fundamenti/HIMR_fundamenti.csv")
+data.fund.mais = read.csv("C:/Users/Admin/Desktop/SAP_SEMINAR/fundamenti/MAIS_fundamenti.csv")
+data.fund.rivp = read.csv("C:/Users/Admin/Desktop/SAP_SEMINAR/fundamenti/RIVP_fundamenti.csv")
+
+prijelazi <- c("Cestovni", "Željeznički", "Riječni", "Pomorski", "Zračni")
+```
+
+
+Izbacivanje outliera iz pojedinih graničnih prijelaza smo obavili na način da se vrijednost postavlja na 0 kako ne bi pridonjeli sumi grupiranoj po godini i kvartalu te kako se ne bi morao izbrisati cijeli redak tog dana te izgubile vrijednosti ostalih prijelaza.
+
+```{r input cleanup}
+is_outlier <- function(x, iqrfac = 1.5) {
+  quants <- quantile(x, na.rm = FALSE)
+  iqr <- quants[4] - quants[2]
+  (x < (quants[2] - iqrfac*iqr) | (quants[4] + iqrfac*iqr) < x)
+}
+
+data.ulaz.putnici.clean <- data.ulaz.putnici %>% mutate(across(-c(X), ~ifelse(is_outlier(.x), 0, .x)))
+```
+
+
+Na granične prijelaze dodajemo stupce godine i kvartala, grupiramo podatke po istima i vrijednosti zbrajamo po pojedinim graničnim 
+prijelazima
+
+
+```{r year quarter group}
+data.ulaz.putnici.clean$YEAR <- with(data.ulaz.putnici.clean, 
+                                     year(as.POSIXlt(data.ulaz.putnici.clean$X, 
+                                                     format = "%Y-%m-%d")))
+
+data.ulaz.putnici.clean$QUARTER <- with(data.ulaz.putnici.clean, 
+                                        ceiling((month(as.POSIXlt(data.ulaz.putnici.clean$X, 
+                                                                  format = "%Y-%m-%d")))/3))
+
+summed.ulaz <- data.ulaz.putnici.clean[data.ulaz.putnici.clean$YEAR < 2019,2:9] %>%
+  group_by(YEAR, QUARTER) %>%
+  summarise_all(sum)
+```
+
+Svakom poduzeću dodajemo iznad izračunate podatke zbog jednostavnijeg korištenja
+
+```{r joined}
+arnt.joined <- inner_join(data.fund.arnt, summed.ulaz, by=c('Year'='YEAR', 'Quarter'='QUARTER'))
+arnt.joined <- arnt.joined[,-1]
+
+himr.joined <- inner_join(data.fund.himr, summed.ulaz, by=c('Year'='YEAR', 'Quarter'='QUARTER'))
+himr.joined <- himr.joined[,-1]
+
+mais.joined <- inner_join(data.fund.mais, summed.ulaz, by=c('Year'='YEAR', 'Quarter'='QUARTER'))
+mais.joined <- mais.joined[,-1]
+
+rivp.joined <- inner_join(data.fund.rivp, summed.ulaz, by=c('Year'='YEAR', 'Quarter'='QUARTER'))
+rivp.joined <- rivp.joined[,-1]
+
+```
+
+
+Prije bilo kakvih zaključaka o modelu regresije pogledat ćemo tablicu korelacija parova graničnih prijelaza.
+
+```{r}
+cor(cbind(summed.ulaz[,3:7]))
+```
+
+Gledajući u koeficijente korelacije primjećujemo da su svi veći od 0.5 te se da zaključiti kako su svi parovi varijabli vrlo snažno korelirani. Iz tog zaključka ćemo ce ograničiti na model s jednim graničnim prijelazom, no uvest ćemo i "Dummy" varijable kvartala kako bi smanjili utjecaj sezonalnosti. Ove varijable uspoređujemo sa prihodom (Sales) iz razloga što neto-dobit (Earnings) ovisi o samom poslovnom modelu poduzeća stoga je prihod bolji kandidat.
+
+```{r}
+arnt.joined.d = dummy_cols(arnt.joined,select_columns='Quarter')
+arnt.fits <- list()
+for(i in names(arnt.joined)[5:10]){
+  arnt.fits[[i]] <- lm(Sales~get(i)+Quarter_1+Quarter_2+Quarter_3, data=arnt.joined.d)
+}
+
+himr.joined.d = dummy_cols(himr.joined,select_columns='Quarter')
+himr.fits <- list()
+for(i in names(himr.joined)[5:10]){
+  himr.fits[[i]] <- lm(Sales~get(i)+Quarter_1+Quarter_2+Quarter_3, data=himr.joined.d)
+}
+
+mais.joined.d = dummy_cols(mais.joined,select_columns='Quarter')
+mais.fits <- list()
+for(i in names(mais.joined)[5:10]){
+  mais.fits[[i]] <- lm(Sales~get(i)+Quarter_1+Quarter_2+Quarter_3, data=mais.joined.d)
+}
+
+rivp.joined.d = dummy_cols(rivp.joined,select_columns='Quarter')
+rivp.fits <- list()
+for(i in names(rivp.joined)[5:10]){
+  rivp.fits[[i]] <- lm(Sales~get(i)+Quarter_1+Quarter_2+Quarter_3, data=rivp.joined.d)
+}
+```
+
+
+Kao primjer ćemo uzeti rezultate modela Maistre za zračni promet.
+
+```{r}
+summary(mais.fits$Zračni)
+```
+
+Gledajući rezulate, model pokazuje vrlo visku linearnu vezu zračnog prometa i prihoda što zaključujemo iz vrijednosti $R^2$ i Adjusted $R^2$
+Nadalje, gledamo normalnost residuala grafički i provodeći Lilliefors-test normalnosti.
+
+```{r}
+plot(mais.fits[["Zračni"]]$residuals)
+hist(mais.fits[["Zračni"]]$residuals)
+hist(rstandard(mais.fits[["Zračni"]]))
+qqnorm(rstandard(mais.fits[["Zračni"]]))
+qqline(rstandard(mais.fits[["Zračni"]]))
+lillie.test(rstandard(mais.fits[["Zračni"]]))
+```
+
+Grafička analiza nam može dati intuitivnu sliku o normalnosti residuala. U ovom slučaju Lillieforsov test ne odbacuje H0 hipotezu o normalnosti.
+Provođenjem regresija svih poduzeća i graničnih prijelaza dobivamo sljedeće rezultate: 
+
+
+##Arena Hospitality Group d.d.
+```{r arnt, echo=TRUE}
+for(prijelaz in prijelazi){
+  arnt <- arnt.fits[[prijelaz]]
+  fstatistic <- summary(arnt)$fstatistic
+  message(paste0(prijelaz, "\n", 
+                 "R squared: ", summary(arnt)$r.squared, "\n",
+                 "Lilliefors-test p-value: ", lillie.test(rstandard(arnt))$p.value, "\n", 
+                 "F-test p-value: ", pf(fstatistic["value"],
+                                        fstatistic["numdf"],
+                                        fstatistic["dendf"], lower.tail = FALSE)))
+}
+```
+
+
+##Imperial Riviera d.d.
+```{r himr}
+for(prijelaz in prijelazi){
+  himr <- himr.fits[[prijelaz]]
+  fstatistic <- summary(himr)$fstatistic
+  message(paste0(prijelaz, "\n", 
+                 "R squared: ", summary(himr)$r.squared, "\n",
+                 "Lilliefors-test p-value: ", lillie.test(rstandard(himr))$p.value, "\n", 
+                 "F-test p-value: ", pf(fstatistic["value"],
+                                        fstatistic["numdf"],
+                                        fstatistic["dendf"], lower.tail = FALSE)))
+}
+```
+
+
+##Maistra d.d.
+```{r mais}
+for(prijelaz in prijelazi){
+  mais <- mais.fits[[prijelaz]]
+  fstatistic <- summary(mais)$fstatistic
+  message(paste0(prijelaz, "\n", 
+                 "R squared: ", summary(mais)$r.squared, "\n",
+                 "Lilliefors-test p-value: ", lillie.test(rstandard(mais))$p.value, "\n", 
+                 "F-test p-value: ", pf(fstatistic["value"],
+                                        fstatistic["numdf"],
+                                        fstatistic["dendf"], lower.tail = FALSE)))
+}
+```
+
+
+##Valamar Riviera d.d.
+```{r rivp}
+for(prijelaz in prijelazi){
+  rivp <- rivp.fits[[prijelaz]]
+  fstatistic <- summary(rivp)$fstatistic
+  message(paste0(prijelaz, "\n", 
+                 "R squared: ", summary(rivp)$r.squared, "\n",
+                 "Lilliefors-test p-value: ", lillie.test(rstandard(rivp))$p.value, "\n", 
+                 "F-test p-value: ", pf(fstatistic["value"],
+                                        fstatistic["numdf"],
+                                        fstatistic["dendf"], lower.tail = FALSE)))
+}
+```
+
+Većina rezulata nam daje vrlo dobar linearni model stoga možemo zaključiti da postoji veza između fundemenata i graničnih prijelaza. 
+Za modele svih poduzeća najbolje rezultate nam daje model Zračnog prometa. U nekim modelima vidimo da je p-vrijednost Lillieforsovog testa normalnosti ispod 0.05 te u tim slučajevima odbacujemo H0 hipotezu o normalnosti. No mi ćemo prihvatiti te modele oslanjajući se na otpornost linearne regresije i normalnosti podataka.
+
+```{r}
